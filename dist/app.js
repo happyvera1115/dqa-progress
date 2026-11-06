@@ -13,9 +13,10 @@ function message(text,error=false){$('message').replaceChildren();if(text)$('mes
 function option(value,text){const n=el('option','',text);n.value=value;return n}
 function fillFilter(id,key,all){const select=$(id),old=select.value;if(key==='all'){select.replaceChildren(option('',all));return;}select.replaceChildren(option('',all));const values=[...new Set(rows.map(r=>r[key]))].sort((a,b)=>a.localeCompare(b,'zh-Hant',{numeric:true}));for(const v of values)select.append(option(v||'__blank',v||'未填寫'));select.value=[...select.options].some(o=>o.value===old)?old:''}
 function reset(){ flowKey='';flowValue='';overallStage='';attentionOnly=false;revalidationOnly=false;$('search').value='';$('ownerFilter').value='';$('statusField').value='all';$('statusFilter').value='';page=1;render() }
-function baseRows(){const f={q:$('search').value,owner:$('ownerFilter').value};if($('statusField').value!=='all')f[$('statusField').value]=$('statusFilter').value;return C.filter(rows,f)}
+function chartStatus(r,key){return String(r[key]||'').trim()==='--'?'不討論':W.flowStatus(r,key)}
+function baseRows(){const key=$('statusField').value,value=$('statusFilter').value;return C.filter(rows,{q:$('search').value,owner:$('ownerFilter').value}).filter(r=>key==='all'||!value||(value==='__blank'?!r[key]:chartStatus(r,key)===value))}
 function needsAttention(r){return r.assessment.warnings.length>0||['review','function','parser'].some(key=>W.flowStatus(r,key)==='待確認')}
-function current(){return baseRows().filter(r=>(!flowKey||W.flowStatus(r,flowKey)===flowValue)&&(!overallStage||r.assessment.stage===overallStage)&&(!attentionOnly||needsAttention(r))&&(!revalidationOnly||r.assessment.needsRevalidation))}
+function current(){return baseRows().filter(r=>(!flowKey||chartStatus(r,flowKey)===flowValue)&&(!overallStage||r.assessment.stage===overallStage)&&(!attentionOnly||needsAttention(r))&&(!revalidationOnly||r.assessment.needsRevalidation))}
 function linksFor(r){return W.issueLinks(r.redmineId||'')}
 function appendIssues(container,r){const links=linksFor(r);if(!links.length){container.append(el('span','muted','未關聯工單'));return}for(const issue of links){const a=el('a','issue-link','#'+issue.id);a.href=issue.url;a.target='_blank';a.rel='noopener';container.append(a)}}
 function sortValue(row,key){return key==='overall'?row.assessment.stage:key==='next'?row.assessment.reason:key==='redmine'?row.redmineId||'':String(row[key]||'')}
@@ -23,7 +24,7 @@ function renderStatusChoices(){
  const key=$('statusField').value, selected=$('statusFilter').value;
  $('statusFilter').disabled=key==='all';
  if(key==='all'){$('statusFilter').replaceChildren(option('','全部狀態'));return;}
- const choices=C.statusChoices(rows,key,{q:$('search').value,owner:$('ownerFilter').value});
+ const choices=C.statusChoices(rows.map(r=>({...r,[key]:chartStatus(r,key)})),key,{q:$('search').value,owner:$('ownerFilter').value});
  const total=choices.reduce((n,p)=>n+p[1],0);
  $('statusFilter').replaceChildren(option('','全部狀態'));
  choices.forEach(([value,count])=>$('statusFilter').append(option(value==='未填寫'?'__blank':value,`${value}（${count}）`)));
@@ -34,7 +35,7 @@ function selectStatusField(key){$('statusField').value=key;$('statusFilter').val
 const piePalette={'待討論':'#7695bd','已排程':'#437fc0','審查中':'#64b5cf','待修改':'#d99270','待核定':'#b1a0d4','開發中':'#55aab0','待驗證':'#d5b064','已完成':'#72b899','待平台 Review':'#8caddc','待 FunctionAuto':'#b49bc7','不討論':'#5c687a','不適用':'#5c687a','--':'#39485e','未填寫':'#39485e','卡關':'#e07c7c'};
 function selectFlow(key,value){if(flowKey===key&&flowValue===value){flowKey='';flowValue=''}else{flowKey=key;flowValue=value}page=1;render()}
 function pieChart(key,title,counts,choices){
- const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','-65 -35 370 310');svg.setAttribute('class','status-pie');svg.setAttribute('role','group');svg.setAttribute('aria-label',title+' 狀態分布，點選扇形篩選');
+ const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox','-90 -35 420 310');svg.setAttribute('class','status-pie');svg.setAttribute('role','group');svg.setAttribute('aria-label',title+' 狀態分布，點選扇形篩選');
  const total=[...counts.values()].reduce((a,b)=>a+b,0),annotations=[];let start=-Math.PI/2;
  choices.filter(v=>(counts.get(v)||0)>0).forEach(value=>{const n=counts.get(value),angle=n/total*Math.PI*2,end=start+angle,path=document.createElementNS(ns,n===total?'circle':'path');
  if(n===total){path.setAttribute('cx','120');path.setAttribute('cy','120');path.setAttribute('r','105')}else{const x=a=>120+105*Math.cos(a),y=a=>120+105*Math.sin(a);path.setAttribute('d',`M120 120 L${x(start)} ${y(start)} A105 105 0 ${angle>Math.PI?1:0} 1 ${x(end)} ${y(end)} Z`)}
@@ -42,7 +43,7 @@ function pieChart(key,title,counts,choices){
  });
  const small=annotations.filter(a=>a.small);
  [-1,1].forEach(side=>{const group=small.filter(a=>(Math.cos(a.mid)<0?-1:1)===side).sort((a,b)=>Math.sin(a.mid)-Math.sin(b.mid));group.forEach((a,i)=>{a.y=Math.max(5,Math.min(235,120+115*Math.sin(a.mid)));if(i)a.y=Math.max(a.y,group[i-1].y+32)});if(group.length&&group.at(-1).y>235){const shift=group.at(-1).y-235;group.forEach(a=>a.y-=shift)}});
- annotations.forEach(a=>{const g=document.createElementNS(ns,'g');g.setAttribute('class','pie-annotation');g.addEventListener('click',()=>selectFlow(key,a.value));let x=120+67*Math.cos(a.mid),y=120+67*Math.sin(a.mid);if(a.small){const side=Math.cos(a.mid)<0?-1:1;x=120+side*119;y=a.y;const line=document.createElementNS(ns,'polyline');line.setAttribute('points',`${120+100*Math.cos(a.mid)},${120+100*Math.sin(a.mid)} ${120+110*Math.cos(a.mid)},${y} ${x},${y}`);line.setAttribute('class','pie-leader');g.append(line)}const t=document.createElementNS(ns,'text');t.setAttribute('x',x);t.setAttribute('y',y-3);t.setAttribute('text-anchor',a.small?(x<120?'end':'start'):'middle');t.setAttribute('class',a.small?'pie-label outside':'pie-label');const name=document.createElementNS(ns,'tspan');name.setAttribute('x',x);name.textContent=a.value;const pct=document.createElementNS(ns,'tspan');pct.setAttribute('x',x);pct.setAttribute('dy','15');pct.textContent=`${Math.round(a.n/total*100)}%`;t.append(name,pct);g.append(t);svg.append(g)});
+ annotations.forEach(a=>{const g=document.createElementNS(ns,'g');g.setAttribute('class','pie-annotation');g.addEventListener('click',()=>selectFlow(key,a.value));let x=120+67*Math.cos(a.mid),y=120+67*Math.sin(a.mid);if(a.small){const side=Math.cos(a.mid)<0?-1:1;x=120+side*119;y=a.y;const line=document.createElementNS(ns,'polyline');line.setAttribute('points',`${120+100*Math.cos(a.mid)},${120+100*Math.sin(a.mid)} ${120+110*Math.cos(a.mid)},${y} ${x},${y}`);line.setAttribute('class','pie-leader');g.append(line)}const t=document.createElementNS(ns,'text');t.setAttribute('x',x);t.setAttribute('y',y-3);t.setAttribute('text-anchor',a.small?(x<120?'end':'start'):'middle');t.setAttribute('class',a.small?'pie-label outside':'pie-label');t.textContent=`${a.value} [${Math.round(a.n/total*100)}%]`;g.append(t);svg.append(g)});
  if(!total){const c=document.createElementNS(ns,'circle');c.setAttribute('cx','120');c.setAttribute('cy','120');c.setAttribute('r','105');c.setAttribute('fill','#253448');svg.append(c)}return svg;
 }
 function render(){
@@ -53,7 +54,7 @@ function render(){
  const base=baseRows();
  const definitions=[['review','平台 Review',['待討論','已排程','審查中','待修改','待核定','已完成','不討論']],['function','FunctionAuto',['待討論','待平台 Review','已排程','開發中','待驗證','已完成','不討論']],['parser','Parser',['待討論','待平台 Review','待 FunctionAuto','已排程','開發中','待驗證','已完成','不討論']]];
  definitions.forEach(([key,title,labels])=>{
-  const card=el('article','flow-card'),counts=new Map();base.forEach(r=>{const value=W.flowStatus(r,key);counts.set(value,(counts.get(value)||0)+1)});
+  const card=el('article','flow-card'),counts=new Map();base.forEach(r=>{const value=chartStatus(r,key);counts.set(value,(counts.get(value)||0)+1)});
   const head=el('div','flow-heading');head.append(el('h3','',title),el('span','',`共 ${base.length} 個測項`));card.append(head);
   const extras=['待平台 Review','待 FunctionAuto','卡關','待評估','未填寫','待確認'];
   const choices=[...new Set([...labels,...extras,...counts.keys(),'不適用'])];
