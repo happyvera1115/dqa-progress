@@ -25,7 +25,9 @@
   }
   const standardHeaders=['平台Review狀態','FunctionAuto狀態','Parser標準狀態'];
   const hasStandard=standardHeaders.every((name,j)=>norm(matrix[d.row]?.[d.map[j+5]])===norm(name)||norm(matrix[d.row]?.[d.map[j+5]])===norm(['平台Review標準狀態','FunctionAuto標準狀態','Parser標準狀態'][j]));
-  const all=extract(matrix,d.row,d.map,hasStandard?[3]:[]),rows=all.filter(r=>r.code&&r.code!=='--');
+  const currentTracker=hasStandard&&['hyper_link','redmine id#','last updated time','last comment','Owner'].every((name,i)=>norm(matrix[d.row]?.[i])===norm(name));
+  const optional=hasStandard?(currentTracker?[3,4]:[3]):[];
+  const all=extract(matrix,d.row,d.map,optional),rows=all.filter(r=>r.code&&r.code!=='--');
   const headers=matrix[d.row]||[],pathColumn=headers.findIndex(h=>['parser/manual/functionauto','適用流程','流程'].includes(norm(h))),issueColumn=headers.findIndex(h=>['redmineid#','redmineid','redmine工單'].includes(norm(h)));
   for(const row of rows){const raw=matrix[row.sourceRow-1]||[];if(pathColumn>=0)row.path=String(raw[pathColumn]??'').trim();if(issueColumn>=0)row.redmineId=String(raw[issueColumn]??'').trim();row.standardStatusKeys=['review','function','parser'].filter((key,j)=>[['平台Review標準狀態','平台Review狀態'],['FunctionAuto標準狀態','FunctionAuto狀態'],['Parser標準狀態','Parser狀態']][j].some(name=>norm(headers[d.map[j+5]])===norm(name)));row.statusNotes={};for(const [key,label] of [['review','Note for 平台review'],['function','Note for FunctionAuto Status'],['parser','Note for Parser status']]){const col=headers.findIndex(h=>norm(h)===norm(label));if(col>=0)row.statusNotes[key]=String(raw[col]??'').trim();}}
   if(!rows.length)throw Error('找不到有 Test Code 的測項，保留原有資料。');
